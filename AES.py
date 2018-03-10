@@ -1,5 +1,6 @@
 #!/usr/bin/env python
-
+import time
+import socket;
 
 """
     Copyright (C) 2012 Bo Zhu http://about.bozhu.me
@@ -133,13 +134,18 @@ class AES:
 
         # print self.round_keys
 
+    def xor(self, s, k):
+        for i in range(4):
+            for j in range(4):
+                s[i][j] ^= k[i][j]
+        return s
+
     def nsplit(self, texto, tam):
         return [texto[k:k + tam] for k in range(0,len(texto),tam)]
 
     def run(self, text, action="cifrar"):
 
         self.text = text
-        print type(text)
 
         text_blocks = self.nsplit(self.text, 16)
         result = 0
@@ -155,6 +161,53 @@ class AES:
                 result = self.decrypt(block)
                 temp = self.longToStr(result)
                 total += temp
+
+        return total
+
+    def run2(self, text, vector, action="cifrar"):
+        vector = self.strToLong(vector)
+        vector = text2matrix(vector)
+        self.text = text
+
+        text_blocks = self.nsplit(self.text, 16)
+
+        result = 0
+        total = ""
+        if action == "cifrar":
+            contador = 0
+            for block in text_blocks:
+                print len(block)
+                newBlock = self.strToLong(block)
+
+                if contador == 0: #Solo entra una vez debido a que utiliza el vector de inicializacion
+                    res = self.xor(text2matrix(newBlock),vector) #xor entre el primer bloque y el vector
+                    result = self.encrypt(self.longToStr(matrix2text(res))) #al res del xor lo cifro
+                    temp = self.longToStr(result) #paso el cifrado a long
+                    total += temp #lo guardo en el resultado total
+                    contador = contador + 1 #aumento para que no vuelva a entrar al if
+                else: #Entra el resto de veces utilizando el resultado anterior
+                    res = self.xor(text2matrix(newBlock), text2matrix(result))
+                    result = self.encrypt(self.longToStr(matrix2text(res)))
+                    temp = self.longToStr(result)
+                    total += temp
+
+        else:
+            contador = 0
+            lastBlock = ""
+            for block in text_blocks:
+                if contador == 0:
+                    result = self.decrypt(block)
+                    res = self.xor(text2matrix(result),vector)
+                    temp = self.longToStr(matrix2text(res))
+                    total += temp
+                    lastBlock = block
+                    contador = contador + 1
+                else:
+                    result = self.decrypt(block)
+                    res = self.xor(text2matrix(result), text2matrix(self.strToLong(lastBlock)))
+                    temp = self.longToStr(matrix2text(res))
+                    total += temp
+                    lastBlock = block
 
         return total
 
@@ -265,10 +318,38 @@ if __name__ == '__main__':
 
     master_key= "ClaveParaUsarAes"
     AES = AES(master_key)
-    plaintext = "Un dia vi una vaca vestida de uniforme"
+    
+    initialization = "palabradedecisei"
 
-    encrypted = AES.run(plaintext, action="cifrar")
-    decrypted = AES.run(encrypted, action="descifrar")
+    plaintext = ["AllNeedMemories", "Murcielago123456Murcielago123456", "LaPizzaDeDonCangrejoEsLaMejor",
+                 "parangaricutirimicuaro", "pruebitititcas"]
+    contador = 0
+
+    start_time = time.time()
+    servidor = "192.168.0.6"
+    puerto = 5000
+    cliente = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    cliente.connect((servidor, puerto))
+
+    while True:
+
+        if (time.time() - start_time) % 4 == 0:
+
+            encrypted = AES.run2(plaintext[contador], initialization, action="cifrar")
+
+            cliente.send(encrypted)
+            cliente.send(master_key)
+            cliente.send(initialization)
+
+            print ("envioooo")
+            if contador < 4:
+                contador = contador + 1
+
+    #encrypted = AES.run2(plaintext, initialization, action="cifrar")
+    #decrypted = AES.run2(encrypted, initialization, action="descifrar")
+
+    #encrypted = AES.run(plaintext, action="cifrar")
+    #decrypted = AES.run(encrypted, action="descifrar")
 
     print("Plaintext: ",plaintext)
     print("Ciphertext: ",encrypted)
